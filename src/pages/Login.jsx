@@ -11,7 +11,7 @@ export default function Login() {
     setError('')
 
     if (!email.toLowerCase().endsWith(ALLOWED_EMAIL_DOMAIN)) {
-      setError(`Use your XIMB email address (ends with ${ALLOWED_EMAIL_DOMAIN}).`)
+      setError(`Use your XIMB email address.`)
       return
     }
 
