@@ -2,11 +2,16 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import RequestCard from '../components/RequestCard'
 import { matchScore, buildSkillWeights } from '../lib/matching'
+import { warmEmbeddings, semanticSimilarity } from '../lib/embeddings'
 
 export default function Browse({ profile }) {
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  // Bumped once the embedding model finishes warming up for the skills
+  // currently on screen — triggers a re-sort/re-score using semantic
+  // similarity, without blocking the initial render on a model download.
+  const [semanticReady, setSemanticReady] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -27,6 +32,22 @@ export default function Browse({ profile }) {
     }
   }, [profile])
 
+  useEffect(() => {
+    if (!profile || requests.length === 0) return
+    const allSkills = [
+      ...(profile.skills_have || []),
+      ...(profile.skills_want || []),
+      ...requests.flatMap((r) => [...(r.skills_needed || []), ...(r.skills_offered || [])]),
+    ]
+    let active = true
+    warmEmbeddings(allSkills).then(() => {
+      if (active) setSemanticReady((v) => v + 1)
+    })
+    return () => {
+      active = false
+    }
+  }, [profile, requests])
+
   // Rare, hard-to-find skills should count for more than ones every
   // second request lists — this looks across all open requests to
   // figure out which is which, the same way recommendation systems
@@ -43,9 +64,12 @@ export default function Browse({ profile }) {
     )
     if (!profile) return filtered
     return [...filtered].sort(
-      (a, b) => matchScore(profile, b, skillWeights) - matchScore(profile, a, skillWeights)
+      (a, b) =>
+        matchScore(profile, b, skillWeights, semanticSimilarity) -
+        matchScore(profile, a, skillWeights, semanticSimilarity)
     )
-  }, [requests, search, profile, skillWeights])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requests, search, profile, skillWeights, semanticReady])
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
@@ -78,7 +102,7 @@ export default function Browse({ profile }) {
       ) : (
         <div className="grid sm:grid-cols-2 gap-x-8 gap-y-10">
           {sorted.map((r, i) => (
-            <RequestCard key={r.id} request={r} viewerProfile={profile} skillWeights={skillWeights} index={i} />
+            <RequestCard key={r.id} request={r} viewerProfile={profile} skillWeights={skillWeights} index={i} semanticReady={semanticReady} />
           ))}
         </div>
       )}

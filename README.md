@@ -67,6 +67,62 @@ student's profile:
 This is a simple, transparent heuristic you can tune — it's plain
 JavaScript, not a black box.
 
+### Semantic matching (real ML, mostly precomputed)
+
+`src/lib/embeddings.js` adds a fourth tier on top of the heuristic:
+skills that are genuinely related but share no words at all — "Growth
+Hacking" and "Digital Marketing," say — get partial credit from a small
+sentence-embedding model (`Xenova/all-MiniLM-L6-v2`, ~25MB, quantized),
+run via [transformers.js](https://huggingface.co/docs/transformers.js).
+
+Since real usage is steered toward the preset skill list in
+`skillPresets.js` (see below), the ~40 preset vectors are computed
+**once, offline** and shipped as a small static file
+(`public/skill-embeddings.json`, ~60-100KB) — loading that is instant,
+no model download involved. The full model only loads as a fallback,
+lazily, and only for whichever specific skill isn't in that file —
+almost always because someone typed a custom skill.
+
+**Run this once, and again any time you edit `skillPresets.js`:**
+```bash
+npm run precompute-embeddings
+```
+This needs real internet access to download the model — it computes
+the vectors on your machine and writes the JSON file, which then gets
+committed like any other file. `public/skill-embeddings.json` starts
+as an empty `{}` in this repo; run the script before your first deploy
+so the fast path actually has something to load. If it's never run,
+nothing breaks — every comparison just falls back to the live model
+instead, which is the original (slower, heavier) behavior.
+
+### Preset skills
+
+`src/lib/skillPresets.js` holds ~40 curated skills across six
+categories, used by the skill picker in `SkillInput.jsx`. Steering
+input toward a controlled vocabulary means most comparisons are exact
+matches before any fuzzy or semantic logic even runs — typos and
+phrasing drift mostly stop being a problem for anything on the list.
+Custom entries are still allowed (there's a fallback in the picker UI)
+so nobody's blocked from entering a real skill that isn't listed yet —
+they just don't get the instant-embedding fast path for that one skill.
+
+**Two things worth knowing if you keep iterating on this:**
+
+- The similarity threshold for "these are related" (`SEMANTIC_THRESHOLD`
+  in `matching.js`) is a starting estimate, not something empirically
+  tuned against real skill data — the same way the string-matching
+  thresholds needed adjusting after real test cases surfaced (an "Excel"
+  vs "Excellent Communication" false positive, notably). Watch for
+  matches that feel too generous or too stingy once real students are
+  using it, and adjust the constant.
+- First-time visitors to Browse or a request page download a real
+  chunk of data (~25MB model + WASM runtime) in the background. It's
+  lazy and doesn't block the page from rendering, but on a slow
+  connection the semantic layer simply won't be "warm" yet for the
+  first few seconds — the heuristic score shows immediately and the
+  semantic upgrade applies once the model finishes loading, so nothing
+  breaks, it just improves after a moment.
+
 ## Project structure
 
 ```

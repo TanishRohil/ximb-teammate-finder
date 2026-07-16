@@ -80,10 +80,51 @@ function similarity(a, b) {
 }
 
 const FUZZY_THRESHOLD = 0.8 // ~1-2 character typos in a normal skill phrase still count
+const STEM_MIN_LEN = 4 // ignore short words ("in", "for") when checking for a shared root
+const STEM_MIN_RATIO = 0.6 // the shared root must cover most of the longer word too — this is
+                            // what stops "Excel" from false-matching "Excellent" (5/9 = 0.56, just
+                            // under the bar) while still catching "Market" in "Marketing" (6/9 = 0.67)
+const STEM_CREDIT = 0.5 // partial credit for a shared root word, e.g. "market" in both
+                         // "Market Sizing" and "Marketing" — related, but not the same skill,
+                         // so this scores lower than an actual synonym or typo match (which hit 1
+                         // or ~0.8-1 above) rather than the 0 a whole-phrase comparison gives it.
+const REASON_MIN_SCORE = 0.45 // surface a partial stem match as a visible "matched on" reason too,
+                               // not just full/fuzzy hits — otherwise the UI silently uses credit
+                               // the person can't see the source of.
+
+// Do `want` and `have` share a root word worth crediting? Checks each
+// pair of words across the two phrases for an exact-word match or one
+// word being a prefix of the other ("market" / "marketing"), so
+// related-but-not-identical skills aren't scored the same as no
+// overlap at all.
+function stemOverlap(wantNorm, haveNorm) {
+  const wantWords = wantNorm.split(' ').filter((w) => w.length >= STEM_MIN_LEN)
+  const haveWords = haveNorm.split(' ').filter((w) => w.length >= STEM_MIN_LEN)
+
+  for (const w of wantWords) {
+    for (const h of haveWords) {
+      if (w === h) return true
+      const [shorter, longer] = w.length <= h.length ? [w, h] : [h, w]
+      if (longer.startsWith(shorter) && shorter.length / longer.length >= STEM_MIN_RATIO) return true
+    }
+  }
+  return false
+}
+
+const SEMANTIC_THRESHOLD = 0.55 // below this, the model isn't confident enough to call it related —
+                                 // starting estimate based on typical MiniLM behavior on short phrases,
+                                 // not yet tuned against real skill data. Watch for false positives/
+                                 // negatives once this is live and adjust.
+const SEMANTIC_CREDIT = 0.75 // sits between stem-overlap credit (0.5) and an actual synonym/typo
+                              // match (~0.8-1) — the model thinks these are related, but they're not
+                              // textually similar the way a typo or known synonym is.
 
 // Finds the best-matching skill in `available` for a single `want` skill.
+// `semanticFn`, if provided, is called as semanticFn(wantRaw, haveRaw) and
+// should return a 0-1 similarity or null if not available yet — see
+// src/lib/embeddings.js for the implementation actually used by the UI.
 // Returns { score: 0-1, matchedRaw: original text of the match | null }.
-function bestMatch(want, available, availableRaw) {
+function bestMatch(want, available, availableRaw, semanticFn) {
   const wantNorm = normalize(want)
   let best = 0
   let matchedRaw = null
@@ -91,10 +132,28 @@ function bestMatch(want, available, availableRaw) {
   for (let i = 0; i < available.length; i++) {
     const have = available[i]
     if (wantNorm === have) return { score: 1, matchedRaw: availableRaw[i] }
+
     const sim = similarity(wantNorm, have)
     if (sim >= FUZZY_THRESHOLD && sim > best) {
       best = sim
       matchedRaw = availableRaw[i]
+      continue
+    }
+
+    // Whole-phrase similarity missed it, but do they share a root word?
+    if (best < STEM_CREDIT && stemOverlap(wantNorm, have)) {
+      best = STEM_CREDIT
+      matchedRaw = availableRaw[i]
+    }
+
+    // Last resort: does an embedding model think these are related,
+    // even though they share no words at all?
+    if (semanticFn && best < SEMANTIC_CREDIT) {
+      const sem = semanticFn(want, availableRaw[i])
+      if (sem !== null && sem >= SEMANTIC_THRESHOLD) {
+        best = SEMANTIC_CREDIT
+        matchedRaw = availableRaw[i]
+      }
     }
   }
   return { score: best, matchedRaw }
@@ -111,7 +170,7 @@ function bestMatch(want, available, availableRaw) {
 // this degrades gracefully to a plain average when no corpus-wide
 // weight data is available (e.g. scoring a single request in
 // isolation, with no visibility into how common each skill is).
-function weightedMatch(wanted = [], available = [], weights = null) {
+function weightedMatch(wanted = [], available = [], weights = null, semanticFn = null) {
   const availableNorm = available.map(normalize)
   let scoredWeight = 0
   let totalWeight = 0
@@ -120,11 +179,11 @@ function weightedMatch(wanted = [], available = [], weights = null) {
   for (const rawWant of wanted) {
     const wantNorm = normalize(rawWant)
     const weight = weights?.get(wantNorm) ?? 1
-    const { score, matchedRaw } = bestMatch(rawWant, availableNorm, available)
+    const { score, matchedRaw } = bestMatch(rawWant, availableNorm, available, semanticFn)
 
     totalWeight += weight
     scoredWeight += score * weight
-    if (score >= FUZZY_THRESHOLD) reasons.push(rawWant)
+    if (score >= REASON_MIN_SCORE) reasons.push(rawWant)
   }
 
   return { ratio: totalWeight ? scoredWeight / totalWeight : 0, reasons }
@@ -158,7 +217,7 @@ export function buildSkillWeights(requests = []) {
   return weights
 }
 
-export function matchScore(viewerProfile, request, skillWeights = null) {
+export function matchScore(viewerProfile, request, skillWeights = null, semanticFn = null) {
   if (!viewerProfile || !request) return 0
 
   const needed = request.skills_needed || []
@@ -167,11 +226,11 @@ export function matchScore(viewerProfile, request, skillWeights = null) {
   const viewerWants = viewerProfile.skills_want || []
 
   const fillsGap = needed.length
-    ? weightedMatch(needed, viewerHas, skillWeights).ratio
+    ? weightedMatch(needed, viewerHas, skillWeights, semanticFn).ratio
     : 0.5 // no specific gap listed — treat as neutral
 
   const teachesViewer = viewerWants.length
-    ? weightedMatch(viewerWants, requestOffers, skillWeights).ratio
+    ? weightedMatch(viewerWants, requestOffers, skillWeights, semanticFn).ratio
     : 0.5
 
   const score = fillsGap * 0.7 + teachesViewer * 0.3
@@ -182,7 +241,7 @@ export function matchScore(viewerProfile, request, skillWeights = null) {
 // actually drove the score, in the request's own original wording, so
 // they can be highlighted on the card instead of leaving the person to
 // take the percentage on faith.
-export function matchReasons(viewerProfile, request) {
+export function matchReasons(viewerProfile, request, semanticFn = null) {
   if (!viewerProfile || !request) return { filling: [], teaching: [] }
 
   const needed = request.skills_needed || []
@@ -191,8 +250,8 @@ export function matchReasons(viewerProfile, request) {
   const viewerWants = viewerProfile.skills_want || []
 
   return {
-    filling: weightedMatch(needed, viewerHas).reasons,
-    teaching: weightedMatch(viewerWants, requestOffers).reasons,
+    filling: weightedMatch(needed, viewerHas, null, semanticFn).reasons,
+    teaching: weightedMatch(viewerWants, requestOffers, null, semanticFn).reasons,
   }
 }
 

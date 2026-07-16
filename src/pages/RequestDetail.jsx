@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabaseClient'
 import SkillTag from '../components/SkillTag'
 import MatchStamp from '../components/MatchStamp'
 import { matchScore } from '../lib/matching'
+import { warmEmbeddings, semanticSimilarity } from '../lib/embeddings'
+import { logMatchEvent } from '../lib/matchEvents'
 
 export default function RequestDetail({ profile }) {
   const { id } = useParams()
@@ -15,6 +17,7 @@ export default function RequestDetail({ profile }) {
   const [myInterest, setMyInterest] = useState(null)
   const [sending, setSending] = useState(false)
   const [notice, setNotice] = useState('')
+  const [semanticReady, setSemanticReady] = useState(0)
 
   const isOwner = request && profile && request.user_id === profile.id
 
@@ -53,6 +56,23 @@ export default function RequestDetail({ profile }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, profile])
 
+  useEffect(() => {
+    if (!profile || !request) return
+    const skills = [
+      ...(profile.skills_have || []),
+      ...(profile.skills_want || []),
+      ...(request.skills_needed || []),
+      ...(request.skills_offered || []),
+    ]
+    let active = true
+    warmEmbeddings(skills).then(() => {
+      if (active) setSemanticReady((v) => v + 1)
+    })
+    return () => {
+      active = false
+    }
+  }, [profile, request])
+
   const expressInterest = async (e) => {
     e.preventDefault()
     setSending(true)
@@ -69,12 +89,24 @@ export default function RequestDetail({ profile }) {
     }
   }
 
+  const acceptedCount = interests.filter((i) => i.status === 'accepted').length
+  const teamSize = request?.team_size_needed || 1
+  const teamFull = acceptedCount >= teamSize
+
   const respondToInterest = async (interestId, status) => {
+    if (status === 'accepted' && teamFull) return
+
+    const interest = interests.find((i) => i.id === interestId)
+
     await supabase.from('interests').update({ status }).eq('id', interestId)
 
-    // Accepting a teammate closes the file to further interest.
-    // (Owners can still reopen it from the toggle below if the team falls through.)
-    if (status === 'accepted') {
+    // Fire-and-forget: this is purely for future model training, so a
+    // failure here should never hold up or break the actual decision.
+    if (interest) {
+      logMatchEvent({ interest, request, ownerId: profile.id, outcome: status })
+    }
+
+    if (status === 'accepted' && acceptedCount + 1 >= teamSize) {
       await supabase.from('requests').update({ status: 'closed' }).eq('id', id)
     }
 
@@ -89,7 +121,10 @@ export default function RequestDetail({ profile }) {
 
   if (!request) return <p className="max-w-3xl mx-auto px-4 py-10 text-sm font-display">Retrieving file…</p>
 
-  const score = profile ? matchScore(profile, request) : null
+  // Recomputed on every render, so once semanticReady bumps (embeddings
+  // finished warming, see the effect above) this picks up fresh scores
+  // automatically — no memoization here to fight with.
+  const score = profile ? matchScore(profile, request, null, semanticSimilarity) : null
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
@@ -139,6 +174,11 @@ export default function RequestDetail({ profile }) {
             <div className="flex justify-between items-center mb-3">
               <p className="font-display text-sm font-bold text-ink">
                 Interest received ({interests.length})
+                {teamSize > 1 && (
+                  <span className="ml-2 font-normal text-charcoal/50">
+                    · {acceptedCount}/{teamSize} spots filled
+                  </span>
+                )}
               </p>
               <button onClick={toggleStatus} className="text-xs font-display underline text-charcoal/60 hover:text-stamp">
                 Mark as {request.status === 'open' ? 'closed' : 'open'}
@@ -171,16 +211,24 @@ export default function RequestDetail({ profile }) {
                         {i.status}
                       </span>
                     </div>
-                    {i.status === 'pending' && (
-                      <div className="mt-2">
-                        <div className="flex gap-2">
-                          <button onClick={() => respondToInterest(i.id, 'accepted')} className="text-xs px-2 py-1 bg-sage text-white rounded-sm">Accept</button>
-                          <button onClick={() => respondToInterest(i.id, 'declined')} className="text-xs px-2 py-1 bg-charcoal/20 text-charcoal rounded-sm">Decline</button>
+                  {i.status === 'pending' && (
+                      request.status === 'open' && !teamFull ? (
+                        <div className="mt-2">
+                          <div className="flex gap-2">
+                            <button onClick={() => respondToInterest(i.id, 'accepted')} className="text-xs px-2 py-1 bg-sage text-white rounded-sm">Accept</button>
+                            <button onClick={() => respondToInterest(i.id, 'declined')} className="text-xs px-2 py-1 bg-charcoal/20 text-charcoal rounded-sm">Decline</button>
+                          </div>
+                          <p className="text-[11px] text-charcoal/40 mt-1">
+                            {teamSize > 1
+                              ? `Accepting fills ${acceptedCount + 1} of ${teamSize} spots and emails you both each other's contact details.`
+                              : "Accepting closes this file and emails you both each other's contact details."}
+                          </p>
                         </div>
-                        <p className="text-[11px] text-charcoal/40 mt-1">
-                          Accepting closes this file and emails you both each other's contact details.
+                      ) : (
+                        <p className="text-[11px] text-charcoal/40 mt-2">
+                          {teamFull ? 'Team is filled — this file is no longer taking new acceptances.' : 'This file is closed.'}
                         </p>
-                      </div>
+                      )
                     )}
                   </div>
                 ))}

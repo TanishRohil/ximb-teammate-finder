@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import MatchStamp from './MatchStamp'
 import SkillTag from './SkillTag'
 import { matchScore, matchReasons } from '../lib/matching'
+import { semanticSimilarity } from '../lib/embeddings'
 
 // Deterministic per-card tilt so it doesn't jitter between renders —
 // derived from the request id, not random, so the same card always
@@ -13,9 +14,15 @@ function tiltFor(id) {
   return options[hash % options.length]
 }
 
-export default function RequestCard({ request, viewerProfile, skillWeights, index = 0 }) {
-  const score = viewerProfile ? matchScore(viewerProfile, request, skillWeights) : null
-  const reasons = viewerProfile ? matchReasons(viewerProfile, request) : { filling: [], teaching: [] }
+export default function RequestCard({ request, viewerProfile, skillWeights, index = 0, semanticReady = 0 }) {
+  // semanticReady is otherwise unused here — it's a dependency purely to
+  // force this component to recompute once the embedding model finishes
+  // warming up (see Browse.jsx), since semanticSimilarity's own cache
+  // fills in after this component may have already rendered once.
+  const score = viewerProfile ? matchScore(viewerProfile, request, skillWeights, semanticSimilarity) : null
+  const reasons = viewerProfile
+    ? matchReasons(viewerProfile, request, semanticSimilarity)
+    : { filling: [], teaching: [] }
   const fileNumber = request.id ? request.id.slice(0, 8).toUpperCase() : '—'
   const tilt = tiltFor(request.id)
   const showTape = index % 3 === 0
