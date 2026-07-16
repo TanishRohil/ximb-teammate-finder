@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #b08b5a;
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(0, 0, 0, 0.08), transparent 60%),
+    radial-gradient(circle at 80% 70%, rgba(0, 0, 0, 0.08), transparent 60%),
+    repeating-radial-gradient(circle at center, rgba(0, 0, 0, 0.05) 0, rgba(0, 0, 0, 0.05) 1px, transparent 1px, transparent 8px);
+  color: #241a12;
+  font-family: 'IBM Plex Sans', sans-serif;
+  min-height: 100vh;
+}
+
+.font-display {
+  font-family: 'Courier Prime', monospace;
+}
+
+.font-hand {
+  font-family: 'Caveat', cursive;
+}
+
+.folder-tab {
+  clip-path: polygon(0 0, 100% 0, 94% 100%, 6% 100%);
+}
+
+.stamp {
+  transform: rotate(-6deg);
+  border: 3px solid currentColor;
+  border-radius: 6px;
+  letter-spacing: 0.05em;
+  transition: transform 0.25s ease;
+}
+
+/* A card pinned to the board: slight rotation set per-card via the
+   --r CSS variable, straightens and lifts on hover/focus. Apply
+   alongside Tailwind utilities; this only owns the transform. */
+.board-card {
+  transform: rotate(var(--r, -2deg));
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.board-card:hover,
+.board-card:focus-visible {
+  transform: rotate(0deg) translateY(-6px) scale(1.02);
+  box-shadow: 4px 16px 26px rgba(0, 0, 0, 0.35);
+  z-index: 5;
+}
+
+/* Staggered entrance — pass style={{ animationDelay: `${i * 60}ms` }} */
+.card-enter {
+  animation: card-in 0.5s ease backwards;
+}
+
+.pin {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ff6b5e, #c1272d);
+  box-shadow: 0 3px 4px rgba(0, 0, 0, 0.4);
+  transition: transform 0.25s ease;
+}
+.board-card:hover .pin,
+.board-card:focus-visible .pin {
+  animation: wobble 0.5s ease;
+}
+
+.tape {
+  background: rgba(255, 255, 120, 0.55);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.torn-edge {
+  clip-path: polygon(
+    0% 2%, 4% 0%, 9% 3%, 14% 0%, 19% 2%, 24% 0%, 29% 3%, 34% 0%, 39% 2%,
+    44% 0%, 49% 3%, 54% 0%, 59% 2%, 64% 0%, 69% 3%, 74% 0%, 79% 2%, 84% 0%,
+    89% 3%, 94% 0%, 100% 2%, 100% 100%, 0% 100%
+  );
+}
+
+::selection {
+  background: #c1272d;
+  color: #fff9ec;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
