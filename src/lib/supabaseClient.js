@@ -14,4 +14,4 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 // Only students with this email domain can sign in.
 // TEMPORARY: set to gmail.com for testing. Switch back to the real
 // XIMB student domain (e.g. '@stu.xim.edu.in') before rolling out.
-export const ALLOWED_EMAIL_DOMAIN = '@gmail.com'
+export const ALLOWED_EMAIL_DOMAIN = '@stu.xim.edu.in'
