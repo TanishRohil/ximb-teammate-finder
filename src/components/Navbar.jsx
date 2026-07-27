@@ -11,21 +11,15 @@ export default function Navbar({ profile }) {
   return (
     <header className="bg-ink text-manila-light shadow-[0_3px_10px_rgba(0,0,0,0.25)] relative z-10">
       <div className="max-w-5xl mx-auto px-4 pt-4 flex items-end justify-between">
-<div className="pb-3 flex items-center gap-3">
-          <img
-            src="/sys-logo.png"
-            alt="SYS — The Systems Association of XIMB"
-            className="h-10 w-10 rounded-sm border-2 border-manila-light/20 -rotate-2 shadow-[2px_2px_0_rgba(0,0,0,0.3)]"
-          />
-          <div>
-            <p className="font-display text-xs tracking-[0.3em] text-manila-light/50 uppercase">
-              XIMB · Confidential
-            </p>
-            <h1 className="font-hand text-3xl font-bold tracking-tight -rotate-1 -mb-1">
-              The Board
-              <span className="text-stamp">.</span>
-            </h1>
-          </div>
+<div className="pb-3">
+          <p className="font-display text-xs tracking-[0.3em] text-manila-light/50 uppercase">
+            XIMB · Confidential
+          </p>
+          <h1 className="font-hand text-3xl font-bold tracking-tight -rotate-1 -mb-1">
+            The Board
+            <span className="text-stamp">.</span>
+          </h1>
+        </div>
         </div>
         <nav className="flex gap-2">
           {tabs.map((t) => (
