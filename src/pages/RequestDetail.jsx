@@ -139,12 +139,23 @@ export default function RequestDetail({ profile }) {
               FILE No. {request.id.slice(0, 8).toUpperCase()} — {request.status.toUpperCase()}
             </p>
             <h2 className="font-display text-2xl font-bold text-ink">{request.competition_name}</h2>
-            {author && (
-              <p className="text-sm text-charcoal/60 mt-1">
-                Filed by {author.full_name} · {author.batch}
-                {author.gender && ` · ${author.gender}`}
-              </p>
-            )}
+{author && (
+  <p className="text-sm text-charcoal/60 mt-1 flex items-center flex-wrap gap-x-1.5 gap-y-1">
+    <span>
+      Filed by <span className="font-medium text-charcoal/80">{author.full_name}</span>
+    </span>
+    {author.batch && (
+      <span className="font-display text-[9px] uppercase tracking-wider bg-charcoal/5 text-charcoal/50 px-1.5 py-0.5 rounded-sm">
+        {author.batch}
+      </span>
+    )}
+    {author.gender && (
+      <span className="font-display text-[9px] uppercase tracking-wider bg-charcoal/5 text-charcoal/50 px-1.5 py-0.5 rounded-sm">
+        {author.gender}
+      </span>
+    )}
+  </p>
+)}
           </div>
           {score !== null && !isOwner && <MatchStamp score={score} />}
         </div>
