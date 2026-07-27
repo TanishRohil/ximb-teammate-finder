@@ -15,9 +15,9 @@ export default function Browse({ profile }) {
 
   useEffect(() => {
     let active = true
-    supabase
+      supabase
       .from('requests')
-      .select('*')
+      .select('*, author:profiles!requests_user_id_fkey(full_name, gender, batch)')
       .eq('status', 'open')
       .neq('user_id', profile?.id || '')
       .order('created_at', { ascending: false })
