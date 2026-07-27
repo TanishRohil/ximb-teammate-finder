@@ -47,12 +47,22 @@ export default function RequestCard({ request, viewerProfile, skillWeights, inde
             {request.competition_name}
           </h3>
           {request.author && (
-            <p className="text-xs text-charcoal/50 mt-0.5">
-              Filed by {request.author.full_name}
-              {request.author.batch && ` · ${request.author.batch}`}
-              {request.author.gender && ` · ${request.author.gender}`}
-            </p>
-          )}
+  <p className="text-xs text-charcoal/60 mt-1 flex items-center flex-wrap gap-x-1.5 gap-y-1">
+    <span>
+      Filed by <span className="font-medium text-charcoal/80">{request.author.full_name}</span>
+    </span>
+    {request.author.batch && (
+      <span className="font-display text-[9px] uppercase tracking-wider bg-charcoal/5 text-charcoal/50 px-1.5 py-0.5 rounded-sm">
+        {request.author.batch}
+      </span>
+    )}
+    {request.author.gender && (
+      <span className="font-display text-[9px] uppercase tracking-wider bg-charcoal/5 text-charcoal/50 px-1.5 py-0.5 rounded-sm">
+        {request.author.gender}
+      </span>
+    )}
+  </p>
+)}
         </div>
       </div>
 
