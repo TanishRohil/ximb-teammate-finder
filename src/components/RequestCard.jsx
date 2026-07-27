@@ -43,9 +43,16 @@ export default function RequestCard({ request, viewerProfile, skillWeights, inde
           <p className="font-display text-[10px] tracking-widest text-charcoal/50">
             FILE {fileNumber} · {request.status === 'open' ? 'OPEN' : 'CLOSED'}
           </p>
-          <h3 className="font-display font-bold text-lg text-ink leading-snug">
+<h3 className="font-display font-bold text-lg text-ink leading-snug">
             {request.competition_name}
           </h3>
+          {request.author && (
+            <p className="text-xs text-charcoal/50 mt-0.5">
+              Filed by {request.author.full_name}
+              {request.author.batch && ` · ${request.author.batch}`}
+              {request.author.gender && ` · ${request.author.gender}`}
+            </p>
+          )}
         </div>
       </div>
 
