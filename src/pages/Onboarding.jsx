@@ -91,8 +91,6 @@ export default function Onboarding({ user, existingProfile, onSaved }) {
             <option value="">Prefer not to say</option>
             <option value="Woman">Woman</option>
             <option value="Man">Man</option>
-            <option value="Non-binary">Non-binary</option>
-            <option value="Self-describe">Self-describe</option>
           </select>
           <p className="text-xs text-charcoal/50 mt-1">
             Shown on your dossier for context. It isn't used to rank or filter matches.
