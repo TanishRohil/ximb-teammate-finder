@@ -17,7 +17,7 @@ export default function Footer() {
         <p className="font-hand text-lg -rotate-1">
           Designed by{' '}
           <a
-            href="https://www.linkedin.com/in/YOUR-LINKEDIN-HANDLE"
+            href="https://www.linkedin.com/in/tanish-rohil-447b3a212/"
             target="_blank"
             rel="noopener noreferrer"
             className="underline decoration-dotted underline-offset-2 hover:text-stamp transition-colors"
