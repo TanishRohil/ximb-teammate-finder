@@ -34,6 +34,6 @@ create policy "Applicants can withdraw their own pending interest after 6 hours"
   using (
     auth.uid() = applicant_id
     and status = 'pending'
-    and created_at <= now() - interval '6 hours'
+    and created_at <= now() - interval '4 hours'
   )
   with check (auth.uid() = applicant_id and status = 'withdrawn');
