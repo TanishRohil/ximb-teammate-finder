@@ -22,6 +22,7 @@ export default function RequestDetail({ profile }) {
   const [deleting, setDeleting] = useState(false)
   const [competingInterest, setCompetingInterest] = useState(null)
   const [applyError, setApplyError] = useState('')
+  const [withdrawing, setWithdrawing] = useState(false)
 
   const isOwner = request && profile && request.user_id === profile.id
 
@@ -167,6 +168,13 @@ export default function RequestDetail({ profile }) {
     }
   }
 
+  const withdrawInterest = async () => {
+    setWithdrawing(true)
+    await supabase.from('interests').update({ status: 'withdrawn' }).eq('id', myInterest.id)
+    setWithdrawing(false)
+    load()
+  }
+
   // Recomputed on every render, so once semanticReady bumps (embeddings
   // finished warming, see the effect above) this picks up fresh scores
   // automatically — no memoization here to fight with.
@@ -282,7 +290,8 @@ export default function RequestDetail({ profile }) {
                       </div>
                       <span className={`text-xs font-display uppercase px-2 py-0.5 rounded-sm ${
                         i.status === 'accepted' ? 'bg-sage/20 text-sage' :
-                        i.status === 'declined' ? 'bg-charcoal/10 text-charcoal/50' : 'bg-stamp/10 text-stamp'
+                        i.status === 'declined' ? 'bg-charcoal/10 text-charcoal/50' :
+                        i.status === 'withdrawn' ? 'bg-charcoal/10 text-charcoal/40' : 'bg-stamp/10 text-stamp'
                       }`}>
                         {i.status}
                       </span>
@@ -314,9 +323,36 @@ export default function RequestDetail({ profile }) {
         ) : (
           <div className="border-t border-charcoal/20 pt-4">
             {myInterest ? (
-              <p className="text-sm text-charcoal/70">
-                You've already raised your hand — status: <strong>{myInterest.status}</strong>
-              </p>
+              <div className="text-sm text-charcoal/70">
+                <p>
+                  You've already raised your hand — status: <strong>{myInterest.status}</strong>
+                </p>
+                {myInterest.status === 'pending' && (() => {
+                  // Mirrors the 6-hour hold enforced by the database
+                  // policy in 007_allow_withdraw.sql — this is just
+                  // what decides whether to show the button at all;
+                  // the actual rule lives server-side.
+                  const appliedAt = new Date(myInterest.created_at)
+                  const unlocksAt = new Date(appliedAt.getTime() + 4 * 60 * 60 * 1000)
+                  const canWithdraw = Date.now() >= unlocksAt.getTime()
+
+                  return canWithdraw ? (
+                    <button
+                      onClick={withdrawInterest}
+                      disabled={withdrawing}
+                      className="mt-2 text-xs font-display underline text-charcoal/60 hover:text-stamp disabled:opacity-50"
+                    >
+                      {withdrawing ? 'Withdrawing…' : "Withdraw my application — I'll try elsewhere"}
+                    </button>
+                  ) : (
+                    <p className="mt-2 text-[11px] text-charcoal/40">
+                      You can withdraw this after{' '}
+                      {unlocksAt.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
+                      {' '}if you haven't heard back yet.
+                    </p>
+                  )
+                })()}
+              </div>
             ) : notice ? (
               <p className="text-sm text-sage">{notice}</p>
             ) : competingInterest ? (
