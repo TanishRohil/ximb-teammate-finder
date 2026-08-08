@@ -18,6 +18,8 @@ export default function RequestDetail({ profile }) {
   const [sending, setSending] = useState(false)
   const [notice, setNotice] = useState('')
   const [semanticReady, setSemanticReady] = useState(0)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const isOwner = request && profile && request.user_id === profile.id
 
@@ -100,12 +102,14 @@ export default function RequestDetail({ profile }) {
 
     await supabase.from('interests').update({ status }).eq('id', interestId)
 
-    // Fire-and-forget: this is purely for future model training, so a
-    // failure here should never hold up or break the actual decision.
     if (interest) {
       logMatchEvent({ interest, request, ownerId: profile.id, outcome: status })
     }
 
+    // Closing the request (here, or via the manual toggle below) is what
+    // triggers the notify-unfilled email to everyone else still pending —
+    // see supabase/functions/notify-unfilled. Nothing else to do here for
+    // that; it's handled server-side off this status change.
     if (status === 'accepted' && acceptedCount + 1 >= teamSize) {
       await supabase.from('requests').update({ status: 'closed' }).eq('id', id)
     }
@@ -119,12 +123,21 @@ export default function RequestDetail({ profile }) {
     load()
   }
 
-  if (!request) return <p className="max-w-3xl mx-auto px-4 py-10 text-sm font-display">Retrieving file…</p>
+  const deleteRequest = async () => {
+    setDeleting(true)
+    const { error } = await supabase.from('requests').delete().eq('id', id)
+    setDeleting(false)
+    if (!error) {
+      navigate('/dashboard')
+    }
+  }
 
   // Recomputed on every render, so once semanticReady bumps (embeddings
   // finished warming, see the effect above) this picks up fresh scores
   // automatically — no memoization here to fight with.
   const score = profile ? matchScore(profile, request, null, semanticSimilarity) : null
+
+  if (!request) return <p className="max-w-3xl mx-auto px-4 py-10 text-sm font-display">Retrieving file…</p>
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
@@ -139,23 +152,12 @@ export default function RequestDetail({ profile }) {
               FILE No. {request.id.slice(0, 8).toUpperCase()} — {request.status.toUpperCase()}
             </p>
             <h2 className="font-display text-2xl font-bold text-ink">{request.competition_name}</h2>
-{author && (
-  <p className="text-sm text-charcoal/60 mt-1 flex items-center flex-wrap gap-x-1.5 gap-y-1">
-    <span>
-      Filed by <span className="font-medium text-charcoal/80">{author.full_name}</span>
-    </span>
-    {author.batch && (
-      <span className="font-display text-[9px] uppercase tracking-wider bg-charcoal/5 text-charcoal/50 px-1.5 py-0.5 rounded-sm">
-        {author.batch}
-      </span>
-    )}
-    {author.gender && (
-      <span className="font-display text-[9px] uppercase tracking-wider bg-charcoal/5 text-charcoal/50 px-1.5 py-0.5 rounded-sm">
-        {author.gender}
-      </span>
-    )}
-  </p>
-)}
+            {author && (
+              <p className="text-sm text-charcoal/60 mt-1">
+                Filed by {author.full_name} · {author.batch}
+                {author.gender && ` · ${author.gender}`}
+              </p>
+            )}
           </div>
           {score !== null && !isOwner && <MatchStamp score={score} />}
         </div>
@@ -191,9 +193,37 @@ export default function RequestDetail({ profile }) {
                   </span>
                 )}
               </p>
-              <button onClick={toggleStatus} className="text-xs font-display underline text-charcoal/60 hover:text-stamp">
-                Mark as {request.status === 'open' ? 'closed' : 'open'}
-              </button>
+              <div className="flex items-center gap-3">
+                <button onClick={toggleStatus} className="text-xs font-display underline text-charcoal/60 hover:text-stamp">
+                  Mark as {request.status === 'open' ? 'closed' : 'open'}
+                </button>
+
+                {!confirmingDelete ? (
+                  <button
+                    onClick={() => setConfirmingDelete(true)}
+                    className="text-xs font-display underline text-charcoal/60 hover:text-stamp"
+                  >
+                    Delete this file
+                  </button>
+                ) : (
+                  <span className="text-xs font-display">
+                    Delete permanently?{' '}
+                    <button
+                      onClick={deleteRequest}
+                      disabled={deleting}
+                      className="text-stamp underline font-bold disabled:opacity-50"
+                    >
+                      {deleting ? 'Deleting…' : 'Yes, delete'}
+                    </button>{' '}
+                    <button
+                      onClick={() => setConfirmingDelete(false)}
+                      className="text-charcoal/60 underline"
+                    >
+                      Cancel
+                    </button>
+                  </span>
+                )}
+              </div>
             </div>
             {interests.length === 0 ? (
               <p className="text-sm text-charcoal/50">No one has raised their hand yet.</p>
@@ -222,7 +252,7 @@ export default function RequestDetail({ profile }) {
                         {i.status}
                       </span>
                     </div>
-                  {i.status === 'pending' && (
+                    {i.status === 'pending' && (
                       request.status === 'open' && !teamFull ? (
                         <div className="mt-2">
                           <div className="flex gap-2">
