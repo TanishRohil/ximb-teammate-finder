@@ -15,11 +15,10 @@ export default function Navbar({ profile }) {
           <p className="font-display text-xs tracking-[0.3em] text-manila-light/50 uppercase">
             XIMB · Confidential
           </p>
-          <h1 className="font-hand text-3xl font-bold tracking-tight -rotate-1 -mb-1">
+    <h1 className="font-hand text-3xl font-bold tracking-tight -rotate-1 -mb-1">
             The Board
             <span className="text-stamp">.</span>
           </h1>
-        </div>
         </div>
         <nav className="flex gap-2">
           {tabs.map((t) => (
