@@ -20,8 +20,21 @@ export default function RequestDetail({ profile }) {
   const [semanticReady, setSemanticReady] = useState(0)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [competingInterest, setCompetingInterest] = useState(null)
+  const [applyError, setApplyError] = useState('')
 
   const isOwner = request && profile && request.user_id === profile.id
+
+  // Same normalization approach as the matching algorithm — lowercase,
+  // punctuation stripped — so "L'Oreal Brandstorm" and "L'Oréal
+  // Brandstorm" are recognized as the same competition even if two
+  // different requesters typed it slightly differently.
+  const normalizeCompetitionName = (name) =>
+    (name || '')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
 
   const load = async () => {
     const { data: req } = await supabase.from('requests').select('*').eq('id', id).maybeSingle()
@@ -49,6 +62,23 @@ export default function RequestDetail({ profile }) {
           .eq('applicant_id', profile.id)
           .maybeSingle()
         setMyInterest(mine)
+
+        // Can't apply to two requests for the same competition at once
+        // (and can't apply anywhere else once already accepted for it)
+        // — see the trigger in 006_one_active_interest_per_competition.sql
+        // for the actual enforcement; this is just so the person sees a
+        // clear reason instead of only finding out on submit.
+        const { data: others } = await supabase
+          .from('interests')
+          .select('*, request:requests(id, competition_name)')
+          .eq('applicant_id', profile.id)
+          .in('status', ['pending', 'accepted'])
+
+        const target = normalizeCompetitionName(req.competition_name)
+        const conflict = (others || []).find(
+          (o) => o.request_id !== id && normalizeCompetitionName(o.request?.competition_name) === target
+        )
+        setCompetingInterest(conflict || null)
       }
     }
   }
@@ -78,6 +108,7 @@ export default function RequestDetail({ profile }) {
   const expressInterest = async (e) => {
     e.preventDefault()
     setSending(true)
+    setApplyError('')
     const { error } = await supabase.from('interests').insert({
       request_id: id,
       applicant_id: profile.id,
@@ -88,6 +119,10 @@ export default function RequestDetail({ profile }) {
     if (!error) {
       setNotice('Your interest has been filed. The requester will follow up.')
       load()
+    } else {
+      // Most likely the database trigger blocking a duplicate
+      // competition application — see 006_one_active_interest_per_competition.sql.
+      setApplyError(error.message || 'Could not submit your interest — please try again.')
     }
   }
 
@@ -284,6 +319,14 @@ export default function RequestDetail({ profile }) {
               </p>
             ) : notice ? (
               <p className="text-sm text-sage">{notice}</p>
+            ) : competingInterest ? (
+              <p className="text-sm text-charcoal/50">
+                {competingInterest.status === 'accepted' ? (
+                  <>You're already on a team for <strong>{competingInterest.request?.competition_name}</strong> — can't apply to another request for the same competition.</>
+                ) : (
+                  <>You already have a pending application for <strong>{competingInterest.request?.competition_name}</strong> — wait to hear back before applying elsewhere for the same competition.</>
+                )}
+              </p>
             ) : request.status !== 'open' ? (
               <p className="text-sm text-charcoal/50">This file is closed to new interest.</p>
             ) : (
@@ -298,6 +341,7 @@ export default function RequestDetail({ profile }) {
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder="A line or two is enough."
                 />
+                {applyError && <p className="text-xs text-stamp">{applyError}</p>}
                 <button
                   type="submit"
                   disabled={sending}
